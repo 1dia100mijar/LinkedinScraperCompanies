@@ -26,7 +26,7 @@ def scrape(driver, link):
                 ("return (window.pageYOffset !== undefined) ?"
                  " window.pageYOffset : (document.documentElement ||"
                  " document.body.parentNode || document.body);"))
-        time.sleep(1)
+        time.sleep(1)           #experimentar tirar eleste limte de tempo, para ver se a execução do programa é mais rápida, como o programa está a fazer processamento pode ser que não seja nbecessáio o tempo de sleep como era preciso no insta. No insta apenas estava a fazer scrool sem nenhum processamento pelo meio
         soup = BeautifulSoup(driver.page_source, 'html.parser')
         soup = str(soup)
 
@@ -45,7 +45,7 @@ def scrape(driver, link):
         
         new_position = scroll(driver, old_position)
 
-    print(len(posts))
+    print(f'\n\nFound {len(posts)} posts.')
     postsFiltered = []
     for postlink, post in posts.items():
         postInfo = getPostInformation(str(post))
@@ -200,13 +200,22 @@ def initializeCSV(fileName, results):
             escaped_result = [item.replace("\n", r"\n") if isinstance(item, str) else item for item in result]
             writer.writerow(escaped_result)
 
+def convert(seconds):
+    seconds = seconds % (24 * 3600)
+    hour = seconds // 3600
+    seconds %= 3600
+    minutes = seconds // 60
+    seconds %= 60
+     
+    return "%d:%02d:%02d" % (hour, minutes, seconds)
+
 def main():
     print("Welcome to the Linkedin Scraper")
     print("Please enter the following information")
-    # username = "Enter your username here"
-    # password = "Enter your password here"
-    username, password = __prompt_email_password()
-    link = input("Link: ")
+    username = "Enter your username here"
+    password = "Enter your password here"
+    # username, password = __prompt_email_password()
+    link = input("Company Link: ")
     fileName = input("File name: ")
     fileName = f'{fileName}.csv'
     fileDir = f"./{fileName}"
@@ -220,8 +229,8 @@ def main():
     driver.close()
     initializeCSV(fileDir, results)
     end = time.time()
-    elapsedTime = (end - start)/60
-    print(f'\n\nDone! Time elapsed: {elapsedTime:.2f} minutes')
+    elapsedTime = end - start
+    print(f'\n\nDone! Time elapsed: {convert(elapsedTime)} minutes')
     print(f'The csv file {fileName} was saved in the Results directory')
 
 if __name__ == '__main__':
