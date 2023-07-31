@@ -1,4 +1,3 @@
-import requests
 import time
 import re
 import csv
@@ -7,58 +6,107 @@ import selenium.webdriver as webdriver
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.wait import WebDriverWait
-from selenium.webdriver.common.keys import Keys
-from selenium.webdriver.common.action_chains import ActionChains
-import os as system
+import getpass
 
 timeout = 10
-email = 'email'
-password = 'pass'
 
 def scrape(driver, link):
-    login(driver)
-    time.sleep(1)
     link = f'{link}/posts/'
     driver.get(link)
 
     time.sleep(3)
-    soup = BeautifulSoup(driver.page_source, 'html.parser')
- 
-    posts = soup.find_all('div', {'class': 'occludable-update'})
-    
-    postsString = [str(post) for post in posts]
 
-    print(f'quantidade de posts {len(posts)}')
-    results = []
-    for post in postsString:
-        results.append(getPostInformation(post))
+    posts = {}
 
-    return results
+    old_position = 0
+    new_position = None
+    while new_position != old_position:
+        # Get old scroll position
+        old_position = driver.execute_script(
+                ("return (window.pageYOffset !== undefined) ?"
+                 " window.pageYOffset : (document.documentElement ||"
+                 " document.body.parentNode || document.body);"))
+        time.sleep(1)
+        soup = BeautifulSoup(driver.page_source, 'html.parser')
+        soup = str(soup)
 
+        results = soup.split('occludable-update')
         
+        # results = {}
+        for result in results:
+            try:
+                postlink = result.split('data-urn="')[1].split('"')[0]
+                postlink = f'https://www.linkedin.com/feed/update/{postlink}'
+            except:
+                postlink = ''
+            
+            if('linkedin' in postlink):
+                posts[postlink] = result
+        
+        new_position = scroll(driver, old_position)
+
+    print(len(posts))
+    postsFiltered = []
+    for postlink, post in posts.items():
+        postInfo = getPostInformation(str(post))
+        postInfo.append(postlink)
+        postsFiltered.append(postInfo)
+
+    return postsFiltered
+    # posts = soup.find_all('div', {'class': 'occludable-update'})
+    
+    # postsString = [str(post) for post in posts]
+
+    # print(f'quantidade de posts {len(posts)}')
+    # results = []
+    # for post in postsString:
+    #     results.append(getPostInformation(post))
+
+    # return results
+
+def scroll(driver, old_position):
+    next_position = old_position + 700
+    driver.execute_script(f"window.scrollTo(0, {next_position});")
+    # Get new position
+    return driver.execute_script(("return (window.pageYOffset !== undefined) ?"
+                " window.pageYOffset : (document.documentElement ||"
+                " document.body.parentNode || document.body);"))        
 
 def getPostInformation(post):
-    postDescription = getPostDescription(post)
-    hashtags = getHashtags(postDescription)
+    descriptionInfo = getPostDescription(post)
+    hashtags = getHashtags(descriptionInfo[0])
     likes = getLikes(post)
     comments = getComments(post)
     reposts = getReposts(post)
     type = getType(post)
-    postLink = getLink(post)
-    return [postDescription, hashtags, likes, comments, reposts, type, postLink]
+    return [descriptionInfo[0], hashtags, likes, comments, reposts, type, descriptionInfo[1]]
 
-def getPostDescription(post):
+def getPostDescription(post, f = 0):
     try:
         postDescription = post.split('<span class="break-words">')[1]
         postDescription = postDescription.split('</span>')[0]
         postDescription = postDescription.split('<span dir="ltr">')[1]
         postDescription = postDescription.replace('<br/><br/>', '\n\n')
+        
+        #Get Tags(users and websites)
+        tags = postDescription.split('"https://')
+        tagsFiltered = []
+        for tag in tags:
+            tag = tag.split(' ')[0]
+            tag = tag.split('">')[0]
+            if('www.linkedin.com/feed/hashtag' in  tag):
+                continue
+            else:
+                if('.' in tag or '/' in tag):
+                    tagsFiltered.append(tag)
+
         # Remover tags HTML usando regex
         postDescription = re.sub(r'<.*?>', '', postDescription)
     except:
         postDescription = ""
+        tagsFiltered = []
     
-    return postDescription
+    return [postDescription, tagsFiltered]
 
 
 def getHashtags(description):
@@ -68,6 +116,10 @@ def getHashtags(description):
         if(index != 0):
             hashtag = hashtag.split(" ")[0]
             hashtag = hashtag.split("\n")[0]
+            try:
+                hashtag = hashtag.split('\xa0')[0]
+            except:
+                hashtag = hashtag
             hashtags.append(f'#{hashtag}')
     return hashtags
 
@@ -82,9 +134,16 @@ def getLikes(post):
 def getComments(post):
     try:
         comments = post.split(' comments')[1]
-        comments = comments.split('<span aria-hidden="true">')[1].strip()
+        comments = comments.split('<span aria-hidden="true">')[1].strip()        
     except:
         comments = 0
+    
+    if(comments == 0):
+        try:
+            comments = post.split(' comment')[1]
+            comments = comments.split('<span aria-hidden="true">')[1].strip()
+        except:
+            comments = 0
     return comments
 
 def getReposts(post):
@@ -93,38 +152,34 @@ def getReposts(post):
         reposts = reposts.split('aria-hidden="true">')[1].strip()
     except:
         reposts = 0
+
+    if(reposts == 0):
+        try:
+            reposts = post.split(' repost')[1]
+            reposts = reposts.split('aria-hidden="true">')[1].strip()
+        except:
+            reposts = 0
     return reposts
 
 def getType(post):
     if(post.__contains__('update-components-image')):
         type = 'Image'
+    elif(post.__contains__('feed-shared-document__container')):
+        type = 'Document'
+    elif(post.__contains__('update-components-poll')):
+        type = 'Pool'
+    elif(post.__contains__('update-components-article')):
+        type = 'Article'
     else:
         type = 'Video'
     return type
 
-def getLink(post):
-    try:
-        postlink = post.split('data-urn="')[1].split('"')[0]
-        postlink = f'https://www.linkedin.com/feed/update/{postlink}'
-    except:
-        postlink = ""
-    return postlink
-
 def __prompt_email_password():
     u = input("Email: ")
-    # p = getpass.getpass(prompt="Password: ")
-    p =''
+    p = getpass.getpass(prompt="Password: ")
     return (u, p)
 
-def page_has_loaded(driver):
-        page_state = driver.execute_script('return document.readyState;')
-        return page_state == 'complete'
-
-def login(driver):
-
-    # if not email or not password:
-    #     email, password = __prompt_email_password()
-
+def login(driver, email, password):
     driver.get("https://www.linkedin.com/login")
     element = WebDriverWait(driver, timeout).until(EC.presence_of_element_located((By.ID, "username")))
 
@@ -140,14 +195,42 @@ def login(driver):
         if remember:
             remember.submit()
 
-    element = WebDriverWait(driver, timeout).until(EC.presence_of_element_located((By.CLASS_NAME, "global-nav__primary-link")))
+    try:
+        element = WebDriverWait(driver, timeout).until(EC.presence_of_element_located((By.CLASS_NAME, "global-nav__primary-link")))
+    except:
+        print("\nLog In Failed.")
+        exit()
+    time.sleep(1)
+
+def initializeCSV(fileName, results):
+    with open(fileName, 'w', newline='', encoding='utf-8') as csvfile:
+        writer = csv.writer(csvfile)
+        writer.writerow(["description", "hashtags", "likes", "comments", "reposts", "type", "links/tags", "link"])
+        for result in results:
+            escaped_result = [item.replace("\n", r"\n") if isinstance(item, str) else item for item in result]
+            writer.writerow(escaped_result)
 
 def main():
+    print("Welcome to the Linkedin Scraper")
+    print("Please enter the following information")
+    username, password = __prompt_email_password()
+    link = input("Link: ")
+    fileName = input("File name: ")
+    fileName = f'{fileName}.csv'
+    fileDir = f"./{fileName}"
+
+    start = time.time()
+
     print("Creating driver...")
     driver = webdriver.Chrome()
-    link = "https://www.linkedin.com/company/quantropi/"
+    login(driver, username, password)
     results = scrape(driver, link)
-    print(results)
+    driver.close()
+    initializeCSV(fileDir, results)
+    end = time.time()
+    elapsedTime = (end - start)/60
+    print(f'\n\nDone! Time elapsed: {elapsedTime:.2f} minutes')
+    print(f'The csv file {fileName} was saved in the Results directory')
 
 if __name__ == '__main__':
     main()
