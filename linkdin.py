@@ -53,16 +53,6 @@ def scrape(driver, link):
         postsFiltered.append(postInfo)
 
     return postsFiltered
-    # posts = soup.find_all('div', {'class': 'occludable-update'})
-    
-    # postsString = [str(post) for post in posts]
-
-    # print(f'quantidade de posts {len(posts)}')
-    # results = []
-    # for post in postsString:
-    #     results.append(getPostInformation(post))
-
-    # return results
 
 def scroll(driver, old_position):
     next_position = old_position + 700
@@ -213,6 +203,8 @@ def initializeCSV(fileName, results):
 def main():
     print("Welcome to the Linkedin Scraper")
     print("Please enter the following information")
+    # username = "Enter your username here"
+    # password = "Enter your password here"
     username, password = __prompt_email_password()
     link = input("Link: ")
     fileName = input("File name: ")
